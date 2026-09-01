@@ -1,0 +1,667 @@
+{
+  "info": {
+    "_postman_id": "c93f5a17-6d20-4b8e-a441-hcmcloneself01",
+    "name": "Oracle HCM - Worker Clone (SELF-CONTAINED)",
+    "description": "Clone 1-5 workers from Oracle HCM Prod into a lower pod. Basic worker + work relationship + assignment.\n\nEverything is inside this one file. No environment file. No CSV. Works on free Postman.\n\n=====================================================================\nSTEP 1 - FILL IN THE VARIABLES\n=====================================================================\nCollection (right-click) > Edit > Variables tab. Fill in:\n\n  prod_host              https://your-prod.fa.us2.oraclecloud.com\n  prod_user              read-only Prod service account\n  prod_password\n  target_host            https://your-test.fa.us2.oraclecloud.com\n  target_user            target pod service account\n  target_password\n  person_number_list     one or more person numbers, comma separated\n                         e.g.  100015,100016,100017\n\nLeave rest_version and send_person_number as they are unless told otherwise.\n\nThe LDAP job variables are covered in step 2.\n\n>> SECURITY: passwords typed into collection variables are SAVED IN THIS FILE.\n>> Do not commit it to source control or email it once filled in. Use the CURRENT\n>> value column rather than INITIAL where Postman offers both - CURRENT is not\n>> included when the collection is exported.\n\n=====================================================================\nSTEP 2 - ONE-TIME SETUP PER TARGET POD\n=====================================================================\na) Set Person Number generation = Manual in the target pod, so Prod person\n   numbers carry across. If that is not possible, set send_person_number = N\n   and the pod will assign its own numbers.\n\nb) In the target pod go to Tools > Scheduled Processes and submit\n   'Send Pending LDAP Requests' once by hand. Open the process details and copy\n   the exact values into these collection variables:\n       ldap_job_package\n       ldap_job_definition\n       ldap_job_parameters\n   These differ by release. A wrong value gives an unhelpful 400.\n\nc) Run request 0 once. It checks connectivity to both pods and confirms the\n   resource names used by this collection exist in your release.\n\n=====================================================================\nSTEP 3 - RUNNING IT\n=====================================================================\nONE WORKER  - set person_number_list to a single number, then Send requests\n              1 through 6 in order.\n\n2 TO 5      - set person_number_list to a comma separated list, then use\n              Collection Runner (Run collection). Requests 1-4 and 6 loop\n              automatically for each person number. Leave request 5 selected -\n              it is skipped inside the loop and submitted once at the end.\n\nAlways keep the console open: View > Show Postman Console. Every request logs\nwhat it captured, and request 6 prints a final summary table.\n\nAfter the run, set passwords from Security Console > search user > Reset Password.\n\n=====================================================================\nWHAT GETS CREATED\n=====================================================================\n  names[]              LastName, FirstName, LegislationCode\n  workRelationships[]  LegalEmployerName, WorkerType, PrimaryFlag, StartDate\n    assignments[]      ActionCode=HIRE, AssignmentType,\n                       AssignmentStatusTypeCode=ACTIVE_PROCESS,\n                       PrimaryAssignmentFlag=true, EffectiveStartDate,\n                       BusinessUnitId\n\nNot included: job, grade, department, location, manager, phone, address,\nnational ID. To add one, extend the payload in request 4 and add a lookup\nmodelled on request 2.\n\n=====================================================================\nCAUTIONS\n=====================================================================\n* Request 3 is NOT optional. POST /workers has no upsert - running request 4\n  twice creates two people, and Delete Person is restricted and messy. Keep\n  cloned workers in a reserved person-number range so a bad load can be\n  identified and end-dated.\n* Request 1 is the only Prod call and it is GET-only. Never point requests\n  3-6 at Prod. Check target_host before every run.\n* Responses contain real names, dates of birth and person numbers. Do not\n  export response bodies outside the team.\n* Separately worth raising with Oracle via SR: restrict outbound email at the\n  pod level in all non-production environments.\n* Log every clone: person number, username, pod, date, requester.\n\n=====================================================================\nFAILURES\n=====================================================================\n 401                            wrong credentials\n 403                            authenticated but no HCM data role\n req 1 returns 0 rows           person number wrong, or Prod account cannot\n                                see that person\n req 2 returns 0 rows           business unit absent in target pod - create it,\n                                or set tgt_business_unit_id by hand\n req 2 returns many rows        add ;ClassificationCode=FUN_BUSINESS_UNIT to q\n 400 about person number        pod is on automatic numbering - set\n                                send_person_number = N\n 400 on BusinessUnitId          variable empty or holds a Prod ID - re-run req 2\n 404 on hcmOrganizationsLOV     resource name differs in your release - see the\n     or userAccounts            describe call in request 0\n req 4 ok but req 6 empty       request 5 has not finished - wait, re-send\n two people created             request 4 was run twice - see cautions\n\nOwner: gr952p",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "prod_host",
+      "value": "https://PROD-HOST.fa.us2.oraclecloud.com",
+      "type": "default"
+    },
+    {
+      "key": "prod_user",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prod_password",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "target_host",
+      "value": "https://TEST-HOST.fa.us2.oraclecloud.com",
+      "type": "default"
+    },
+    {
+      "key": "target_user",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "target_password",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "rest_version",
+      "value": "11.13.18.05",
+      "type": "default"
+    },
+    {
+      "key": "person_number_list",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "send_person_number",
+      "value": "Y",
+      "type": "default"
+    },
+    {
+      "key": "ldap_job_package",
+      "value": "SET_FROM_SCHEDULED_PROCESSES_UI",
+      "type": "default"
+    },
+    {
+      "key": "ldap_job_definition",
+      "value": "SET_FROM_SCHEDULED_PROCESSES_UI",
+      "type": "default"
+    },
+    {
+      "key": "ldap_job_parameters",
+      "value": "SET_FROM_SCHEDULED_PROCESSES_UI",
+      "type": "default"
+    },
+    { "key": "person_number", "value": "", "type": "default" },
+    { "key": "_queue", "value": "", "type": "default" },
+    { "key": "_idx", "value": "0", "type": "default" },
+    { "key": "_results", "value": "", "type": "default" }
+  ],
+  "item": [
+    {
+      "name": "0 - START HERE (connectivity + resource check)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "REST-Framework-Version", "value": "4" }],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            { "key": "username", "value": "{{target_user}}", "type": "string" },
+            { "key": "password", "value": "{{target_password}}", "type": "string" }
+          ]
+        },
+        "url": {
+          "raw": "{{target_host}}/hcmRestApi/resources/{{rest_version}}/workers?limit=1&onlyData=true",
+          "host": ["{{target_host}}"],
+          "path": ["hcmRestApi", "resources", "{{rest_version}}", "workers"],
+          "query": [
+            { "key": "limit", "value": "1" },
+            { "key": "onlyData", "value": "true" }
+          ]
+        },
+        "description": "Run this once after filling in the variables, and again after any pod refresh.\n\nChecks the target pod is reachable and the service account is authorised, validates the variables you filled in, and resets the worker queue.\n\nCONFIRM RESOURCE NAMES: this collection uses hcmOrganizationsLOV (request 2) and userAccounts (request 6). Both vary by release. To confirm they exist in your instance, send this once by hand:\n\n  GET {{target_host}}/hcmRestApi/resources/{{rest_version}}/describe\n\nThe response is large - use Postman's response search box to look for the resource name. If either is absent, find the equivalent name in the describe output and update the URL in the affected request.\n\nDeselect this request when using Collection Runner."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ---- validate variables and reset the queue ----",
+              "function v(k) { var x = pm.collectionVariables.get(k); return (x === undefined || x === null) ? '' : String(x).trim(); }",
+              "",
+              "var problems = [];",
+              "",
+              "['prod_host','prod_user','prod_password','target_host','target_user','target_password','person_number_list']",
+              "  .forEach(function (k) { if (!v(k)) { problems.push('EMPTY: ' + k); } });",
+              "",
+              "if (v('prod_host').indexOf('PROD-HOST') > -1)   { problems.push('prod_host is still the placeholder'); }",
+              "if (v('target_host').indexOf('TEST-HOST') > -1) { problems.push('target_host is still the placeholder'); }",
+              "if (v('prod_host') && v('prod_host') === v('target_host')) {",
+              "    problems.push('prod_host and target_host are IDENTICAL - this would write to Prod. Fix before continuing.');",
+              "}",
+              "",
+              "if (problems.length) {",
+              "    console.error('--- SETUP PROBLEMS ---');",
+              "    problems.forEach(function (p) { console.error('  ' + p); });",
+              "} else {",
+              "    console.log('Variables look complete.');",
+              "}",
+              "",
+              "// reset queue and results",
+              "var list = v('person_number_list').split(',')",
+              "             .map(function (s) { return s.trim(); })",
+              "             .filter(function (s) { return s.length > 0; });",
+              "",
+              "pm.collectionVariables.set('_queue', JSON.stringify(list));",
+              "pm.collectionVariables.set('_idx', '0');",
+              "pm.collectionVariables.set('_results', JSON.stringify([]));",
+              "",
+              "console.log('Queue reset: ' + list.length + ' worker(s) -> ' + list.join(', '));",
+              "if (list.length > 5) {",
+              "    console.warn('More than 5 workers queued. This collection is designed for small batches - consider HDL for larger volumes.');",
+              "}",
+              "",
+              "console.log('TARGET POD = ' + v('target_host'));",
+              "console.log('Confirm that is the pod you intend to write to.');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Target pod reachable and authorised', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code === 401) { console.error('401 - check target_user / target_password.'); }",
+              "if (pm.response.code === 403) { console.error('403 - account authenticated but lacks the HCM data role.'); }",
+              "",
+              "var q = [];",
+              "try { q = JSON.parse(pm.collectionVariables.get('_queue') || '[]'); } catch (e) {}",
+              "if (q.length === 0) {",
+              "    console.error('Queue is empty. Set person_number_list before running requests 1-6.');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1 - Get worker from PROD (read only)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "REST-Framework-Version", "value": "4" }],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            { "key": "username", "value": "{{prod_user}}", "type": "string" },
+            { "key": "password", "value": "{{prod_password}}", "type": "string" }
+          ]
+        },
+        "url": {
+          "raw": "{{prod_host}}/hcmRestApi/resources/{{rest_version}}/workers?q=PersonNumber={{person_number}}&expand=names,workRelationships.assignments&onlyData=true",
+          "host": ["{{prod_host}}"],
+          "path": ["hcmRestApi", "resources", "{{rest_version}}", "workers"],
+          "query": [
+            { "key": "q", "value": "PersonNumber={{person_number}}" },
+            { "key": "expand", "value": "names,workRelationships.assignments" },
+            { "key": "onlyData", "value": "true" }
+          ]
+        },
+        "description": "The only Prod call in this collection, and it is GET-only.\n\nThe pre-request script picks the next person number off the queue built from person_number_list, so you do not set person_number by hand.\n\nReads only what the create needs. Captured values are printed to the console."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ---- pull the current person number off the queue ----",
+              "function v(k) { var x = pm.collectionVariables.get(k); return (x === undefined || x === null) ? '' : String(x).trim(); }",
+              "",
+              "var queue = [];",
+              "try { queue = JSON.parse(v('_queue') || '[]'); } catch (e) { queue = []; }",
+              "",
+              "// fallback init, in case request 0 was skipped",
+              "if (!Array.isArray(queue) || queue.length === 0) {",
+              "    queue = v('person_number_list').split(',')",
+              "              .map(function (s) { return s.trim(); })",
+              "              .filter(function (s) { return s.length > 0; });",
+              "    pm.collectionVariables.set('_queue', JSON.stringify(queue));",
+              "    pm.collectionVariables.set('_idx', '0');",
+              "    if (!v('_results')) { pm.collectionVariables.set('_results', JSON.stringify([])); }",
+              "    console.log('Queue initialised from person_number_list: ' + queue.join(', '));",
+              "}",
+              "",
+              "if (queue.length === 0) {",
+              "    throw new Error('person_number_list is empty. Fill it in on the collection Variables tab.');",
+              "}",
+              "",
+              "var idx = parseInt(v('_idx') || '0', 10);",
+              "if (isNaN(idx) || idx < 0 || idx >= queue.length) { idx = 0; pm.collectionVariables.set('_idx', '0'); }",
+              "",
+              "pm.collectionVariables.set('person_number', queue[idx]);",
+              "",
+              "// clear anything left over from the previous worker",
+              "['src_person_number','src_date_of_birth','src_first_name','src_last_name',",
+              " 'src_legislation_code','src_legal_employer_name','src_worker_type','src_hire_date',",
+              " 'src_assignment_type','src_business_unit_name','tgt_business_unit_id',",
+              " 'new_person_id','new_person_number','clone_username','clone_payload'",
+              "].forEach(function (k) { pm.collectionVariables.set(k, ''); });",
+              "",
+              "console.log('');",
+              "console.log('==================================================');",
+              "console.log(' WORKER ' + (idx + 1) + ' of ' + queue.length + '  -  person number ' + queue[idx]);",
+              "console.log('==================================================');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "",
+              "var items = [];",
+              "try { items = (pm.response.json().items) || []; } catch (e) {}",
+              "",
+              "pm.test('Exactly one worker matched in Prod', function () {",
+              "    pm.expect(items.length, 'worker count').to.eql(1);",
+              "});",
+              "if (items.length !== 1) {",
+              "    console.error('Person number ' + pm.collectionVariables.get('person_number') + ' returned ' + items.length + ' rows in Prod. Skipping this worker.');",
+              "    postman.setNextRequest('6 - Verify and get username');",
+              "    return;",
+              "}",
+              "",
+              "var w   = items[0];",
+              "var nm  = (w.names && w.names[0]) || {};",
+              "var wr  = (w.workRelationships && w.workRelationships[0]) || {};",
+              "var asg = (wr.assignments && wr.assignments[0]) || {};",
+              "",
+              "function put(k, val) {",
+              "    pm.collectionVariables.set(k, (val === null || val === undefined) ? '' : String(val));",
+              "}",
+              "",
+              "put('src_person_number',       w.PersonNumber);",
+              "put('src_date_of_birth',       w.DateOfBirth);",
+              "put('src_first_name',          nm.FirstName);",
+              "put('src_last_name',           nm.LastName);",
+              "put('src_legislation_code',    nm.LegislationCode);",
+              "put('src_legal_employer_name', wr.LegalEmployerName);",
+              "put('src_worker_type',         wr.WorkerType);",
+              "put('src_hire_date',           wr.StartDate || wr.LegalEmployerSeniorityDate);",
+              "put('src_assignment_type',     asg.AssignmentType);",
+              "put('src_business_unit_name',  asg.BusinessUnitName);",
+              "",
+              "console.log('  captured from Prod:');",
+              "[['person number','src_person_number'],['first name','src_first_name'],",
+              " ['last name','src_last_name'],['date of birth','src_date_of_birth'],",
+              " ['hire date','src_hire_date'],['legal employer','src_legal_employer_name'],",
+              " ['worker type','src_worker_type'],['assignment type','src_assignment_type'],",
+              " ['business unit','src_business_unit_name']",
+              "].forEach(function (p) {",
+              "    console.log('    ' + p[0] + ' = ' + (pm.collectionVariables.get(p[1]) || '(none)'));",
+              "});",
+              "",
+              "pm.test('Last name captured',      function () { pm.expect(pm.collectionVariables.get('src_last_name')).to.not.eql(''); });",
+              "pm.test('Hire date captured',      function () { pm.expect(pm.collectionVariables.get('src_hire_date')).to.not.eql(''); });",
+              "pm.test('Legal employer captured', function () { pm.expect(pm.collectionVariables.get('src_legal_employer_name')).to.not.eql(''); });",
+              "",
+              "if (!pm.collectionVariables.get('src_business_unit_name')) {",
+              "    console.warn('  business unit name not returned - set tgt_business_unit_id by hand before request 4.');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 - Resolve business unit in TARGET",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "REST-Framework-Version", "value": "4" }],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            { "key": "username", "value": "{{target_user}}", "type": "string" },
+            { "key": "password", "value": "{{target_password}}", "type": "string" }
+          ]
+        },
+        "url": {
+          "raw": "{{target_host}}/hcmRestApi/resources/{{rest_version}}/hcmOrganizationsLOV?q=Name={{src_business_unit_name}}&onlyData=true",
+          "host": ["{{target_host}}"],
+          "path": ["hcmRestApi", "resources", "{{rest_version}}", "hcmOrganizationsLOV"],
+          "query": [
+            { "key": "q", "value": "Name={{src_business_unit_name}}" },
+            { "key": "onlyData", "value": "true" }
+          ]
+        },
+        "description": "The only reference lookup a basic hire needs. BusinessUnitId is a pod-specific surrogate key, so it must be resolved here by name - never copied from Prod.\n\nLegal employer goes across by NAME in the payload, so it needs no lookup.\n\nIf several rows come back, the first is used and a warning is logged. Narrow it by adding ;ClassificationCode=FUN_BUSINESS_UNIT to the q parameter.\n\nIf this 404s, the resource name differs in your release - see the describe call described in request 0."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var it = [];",
+              "try { it = (pm.response.json().items) || []; } catch (e) {}",
+              "",
+              "pm.test('Business unit exists in target pod', function () {",
+              "    pm.expect(it.length, 'match count').to.be.above(0);",
+              "});",
+              "",
+              "if (it.length > 0) {",
+              "    var id = it[0].OrganizationId || it[0].BusinessUnitId || it[0].HcmOrganizationId;",
+              "    pm.collectionVariables.set('tgt_business_unit_id', id);",
+              "    console.log('  tgt_business_unit_id = ' + id + '  (' + (it[0].Name || '') + ')');",
+              "    if (it.length > 1) {",
+              "        console.warn('  ' + it.length + ' matches - first row used. Confirm it is right, or add a ClassificationCode filter.');",
+              "    }",
+              "} else {",
+              "    console.error('  business unit \"' + pm.collectionVariables.get('src_business_unit_name') + '\" does not exist in this pod.');",
+              "    console.error('  Create it as functional setup, or set tgt_business_unit_id by hand and note the substitution.');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Check worker not already in TARGET",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "REST-Framework-Version", "value": "4" }],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            { "key": "username", "value": "{{target_user}}", "type": "string" },
+            { "key": "password", "value": "{{target_password}}", "type": "string" }
+          ]
+        },
+        "url": {
+          "raw": "{{target_host}}/hcmRestApi/resources/{{rest_version}}/workers?q=PersonNumber={{src_person_number}}&onlyData=true",
+          "host": ["{{target_host}}"],
+          "path": ["hcmRestApi", "resources", "{{rest_version}}", "workers"],
+          "query": [
+            { "key": "q", "value": "PersonNumber={{src_person_number}}" },
+            { "key": "onlyData", "value": "true" }
+          ]
+        },
+        "description": "MANDATORY. POST /workers has no upsert - running request 4 twice creates two people, and Delete Person is restricted and messy.\n\nThis must return zero rows before request 4. In Collection Runner, a non-zero result automatically skips the create for this worker and moves on."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var it = [];",
+              "try { it = (pm.response.json().items) || []; } catch (e) {}",
+              "",
+              "pm.test('Worker not already present - safe to create', function () {",
+              "    pm.expect(it.length, 'existing rows').to.eql(0);",
+              "});",
+              "",
+              "if (it.length > 0) {",
+              "    console.error('  ALREADY EXISTS in this pod (PersonId ' + it[0].PersonId + '). Create skipped.');",
+              "    pm.collectionVariables.set('new_person_number', pm.collectionVariables.get('src_person_number'));",
+              "    pm.collectionVariables.set('_skip_reason', 'already existed');",
+              "    postman.setNextRequest('6 - Verify and get username');",
+              "} else {",
+              "    pm.collectionVariables.set('_skip_reason', '');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 - Create worker in TARGET",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "REST-Framework-Version", "value": "4" }
+        ],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            { "key": "username", "value": "{{target_user}}", "type": "string" },
+            { "key": "password", "value": "{{target_password}}", "type": "string" }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{{clone_payload}}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{target_host}}/hcmRestApi/resources/{{rest_version}}/workers",
+          "host": ["{{target_host}}"],
+          "path": ["hcmRestApi", "resources", "{{rest_version}}", "workers"]
+        },
+        "description": "Creates worker + work relationship + assignment in one call.\n\nThe body is assembled by the pre-request script so empty optional fields are omitted rather than sent as empty strings - Fusion rejects empty strings on ID attributes. The exact payload is printed to the console.\n\nShape:\n\n{\n  \"PersonNumber\": \"100015\",\n  \"DateOfBirth\": \"1985-04-12\",\n  \"names\": [ { \"LastName\": \"...\", \"FirstName\": \"...\", \"LegislationCode\": \"US\" } ],\n  \"workRelationships\": [ {\n    \"LegalEmployerName\": \"...\",\n    \"WorkerType\": \"E\",\n    \"PrimaryFlag\": true,\n    \"StartDate\": \"2019-06-03\",\n    \"assignments\": [ {\n      \"ActionCode\": \"HIRE\",\n      \"AssignmentType\": \"E\",\n      \"AssignmentStatusTypeCode\": \"ACTIVE_PROCESS\",\n      \"PrimaryAssignmentFlag\": true,\n      \"EffectiveStartDate\": \"2019-06-03\",\n      \"BusinessUnitId\": 300000001234567\n    } ]\n  } ]\n}\n\nManager is deliberately omitted - the manager often does not exist in the lower pod, and a missing supervisor is the most common create failure. To add a reporting line, clone the manager first, then PATCH the assignment."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ---- build the payload, omitting empty optional fields ----",
+              "function v(k) { var x = pm.collectionVariables.get(k); return (x === undefined || x === null) ? '' : String(x).trim(); }",
+              "",
+              "// safety: never POST to the Prod host",
+              "if (v('target_host') && v('prod_host') && v('target_host') === v('prod_host')) {",
+              "    throw new Error('target_host equals prod_host. Refusing to create a worker in Prod.');",
+              "}",
+              "",
+              "var missing = [];",
+              "['src_last_name','src_hire_date','src_legal_employer_name'].forEach(function (k) {",
+              "    if (!v(k)) { missing.push(k.replace('src_','')); }",
+              "});",
+              "if (missing.length) {",
+              "    throw new Error('Cannot build payload - missing: ' + missing.join(', ') + '. Re-run request 1.');",
+              "}",
+              "",
+              "var name = {",
+              "    LastName: v('src_last_name'),",
+              "    LegislationCode: v('src_legislation_code') || 'US'",
+              "};",
+              "if (v('src_first_name')) { name.FirstName = v('src_first_name'); }",
+              "",
+              "var asg = {",
+              "    ActionCode: 'HIRE',",
+              "    AssignmentType: v('src_assignment_type') || 'E',",
+              "    AssignmentStatusTypeCode: 'ACTIVE_PROCESS',",
+              "    PrimaryAssignmentFlag: true,",
+              "    EffectiveStartDate: v('src_hire_date')",
+              "};",
+              "if (v('tgt_business_unit_id')) { asg.BusinessUnitId = Number(v('tgt_business_unit_id')); }",
+              "",
+              "var wr = {",
+              "    LegalEmployerName: v('src_legal_employer_name'),",
+              "    WorkerType: v('src_worker_type') || 'E',",
+              "    PrimaryFlag: true,",
+              "    StartDate: v('src_hire_date'),",
+              "    assignments: [asg]",
+              "};",
+              "",
+              "var payload = { names: [name], workRelationships: [wr] };",
+              "if (v('src_date_of_birth')) { payload.DateOfBirth = v('src_date_of_birth'); }",
+              "if ((v('send_person_number') || 'Y').toUpperCase() === 'Y' && v('src_person_number')) {",
+              "    payload.PersonNumber = v('src_person_number');",
+              "}",
+              "",
+              "pm.collectionVariables.set('clone_payload', JSON.stringify(payload));",
+              "console.log('  payload sent:');",
+              "console.log(JSON.stringify(payload, null, 2));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Worker created', function () {",
+              "    pm.expect(pm.response.code, 'http status').to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "if ([200, 201].indexOf(pm.response.code) > -1) {",
+              "    var r = pm.response.json();",
+              "    pm.collectionVariables.set('new_person_id',     r.PersonId);",
+              "    pm.collectionVariables.set('new_person_number', r.PersonNumber);",
+              "    console.log('  CREATED  PersonId=' + r.PersonId + '  PersonNumber=' + r.PersonNumber);",
+              "} else {",
+              "    console.error('  CREATE FAILED - paste the below into the defect or SR:');",
+              "    console.error(pm.response.text());",
+              "    pm.collectionVariables.set('_skip_reason', 'create failed (' + pm.response.code + ')');",
+              "}",
+              "",
+              "// request 5 is submitted once at the end, not per worker",
+              "postman.setNextRequest('6 - Verify and get username');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 - Send Pending LDAP Requests (run ONCE at the end)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "REST-Framework-Version", "value": "4" }
+        ],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            { "key": "username", "value": "{{target_user}}", "type": "string" },
+            { "key": "password", "value": "{{target_password}}", "type": "string" }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"JobPackageName\": \"{{ldap_job_package}}\",\n  \"JobDefinitionName\": \"{{ldap_job_definition}}\",\n  \"ParameterList\": \"{{ldap_job_parameters}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{target_host}}/fscmRestApi/resources/{{rest_version}}/scheduledProcesses",
+          "host": ["{{target_host}}"],
+          "path": ["fscmRestApi", "resources", "{{rest_version}}", "scheduledProcesses"]
+        },
+        "description": "Creating a worker only queues an LDAP request. Until this runs there is no user account and the person cannot sign in. This is the step most often missed - the symptom looks like the create silently failed.\n\nThis processes every pending request in the pod, so it runs ONCE after all workers are created, not per worker. The loop handles that automatically.\n\nBEFORE FIRST USE: submit Send Pending LDAP Requests once from Tools > Scheduled Processes, open the process details, and copy the exact Job Package Name, Job Definition Name and parameter string into the collection variables. These differ by release and a wrong value returns an unhelpful 400.\n\nAlso run Autoprovision Roles for All Users afterwards if your setup relies on role provisioning rules. Easiest from the UI, or duplicate this request and swap the two job variables.\n\nTo poll the status, send this by hand:\n  GET {{target_host}}/fscmRestApi/resources/{{rest_version}}/scheduledProcesses/{{ldap_request_id}}\nRepeat until the state is SUCCEEDED, ERROR or WARNING. Usually under a minute in a lower pod."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function v(k) { var x = pm.collectionVariables.get(k); return (x === undefined || x === null) ? '' : String(x).trim(); }",
+              "",
+              "if (v('ldap_job_package').indexOf('SET_FROM') > -1 || v('ldap_job_definition').indexOf('SET_FROM') > -1) {",
+              "    throw new Error('ldap_job_package / ldap_job_definition are still placeholders. Submit the process once from Tools > Scheduled Processes, then copy the exact values into the collection variables.');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('LDAP process submitted', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "if ([200, 201].indexOf(pm.response.code) > -1) {",
+              "    var r = pm.response.json();",
+              "    var id = r.ReqstId || r.RequestId;",
+              "    pm.collectionVariables.set('ldap_request_id', id);",
+              "    console.log('');",
+              "    console.log('LDAP process submitted. Request id = ' + id);",
+              "    console.log('Poll it, then re-send request 6 for each worker to pick up the usernames.');",
+              "} else {",
+              "    console.error('Submit failed. Most likely cause: wrong JobPackageName / JobDefinitionName / ParameterList.');",
+              "    console.error(pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6 - Verify and get username",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "REST-Framework-Version", "value": "4" }],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            { "key": "username", "value": "{{target_user}}", "type": "string" },
+            { "key": "password", "value": "{{target_password}}", "type": "string" }
+          ]
+        },
+        "url": {
+          "raw": "{{target_host}}/hcmRestApi/resources/{{rest_version}}/userAccounts?q=PersonNumber={{new_person_number}}&onlyData=true",
+          "host": ["{{target_host}}"],
+          "path": ["hcmRestApi", "resources", "{{rest_version}}", "userAccounts"],
+          "query": [
+            { "key": "q", "value": "PersonNumber={{new_person_number}}" },
+            { "key": "onlyData", "value": "true" }
+          ]
+        },
+        "description": "Confirms the user account exists and returns the username.\n\nAn empty result immediately after the create is normal - request 5 has not run yet. After request 5 completes, re-send this per worker to collect the usernames.\n\nThe test script advances the loop and prints a summary table at the end.\n\nSet passwords from Security Console > search user > Reset Password.\n\nIf this 404s, the userAccounts resource name differs in your release - see request 0."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function v(k) { var x = pm.collectionVariables.get(k); return (x === undefined || x === null) ? '' : String(x).trim(); }",
+              "",
+              "var it = [];",
+              "try { it = (pm.response.json().items) || []; } catch (e) {}",
+              "",
+              "var uname = '';",
+              "if (it.length > 0) {",
+              "    uname = it[0].Username || it[0].UserName || '';",
+              "    pm.collectionVariables.set('clone_username', uname);",
+              "    console.log('  username = ' + uname);",
+              "} else {",
+              "    console.log('  no user account yet - expected until request 5 has run.');",
+              "}",
+              "",
+              "// ---- record the outcome for this worker ----",
+              "var results = [];",
+              "try { results = JSON.parse(v('_results') || '[]'); } catch (e) { results = []; }",
+              "",
+              "var skip = v('_skip_reason');",
+              "results.push({",
+              "    person_number: v('new_person_number') || v('person_number'),",
+              "    person_id:     v('new_person_id'),",
+              "    username:      uname,",
+              "    outcome:       skip ? skip : (v('new_person_id') ? 'created' : 'not created')",
+              "});",
+              "pm.collectionVariables.set('_results', JSON.stringify(results));",
+              "pm.collectionVariables.set('_skip_reason', '');",
+              "",
+              "// ---- advance the loop ----",
+              "var queue = [];",
+              "try { queue = JSON.parse(v('_queue') || '[]'); } catch (e) { queue = []; }",
+              "var idx = parseInt(v('_idx') || '0', 10);",
+              "if (isNaN(idx)) { idx = 0; }",
+              "idx = idx + 1;",
+              "",
+              "if (queue.length > 0 && idx < queue.length) {",
+              "    pm.collectionVariables.set('_idx', String(idx));",
+              "    postman.setNextRequest('1 - Get worker from PROD (read only)');",
+              "} else {",
+              "    pm.collectionVariables.set('_idx', '0');",
+              "",
+              "    console.log('');",
+              "    console.log('==================================================');",
+              "    console.log(' SUMMARY - ' + results.length + ' worker(s)');",
+              "    console.log('==================================================');",
+              "    results.forEach(function (r) {",
+              "        console.log('  ' + (r.person_number || '?') +",
+              "                    '   ' + (r.outcome || '') +",
+              "                    (r.username ? '   username: ' + r.username : ''));",
+              "    });",
+              "    console.log('');",
+              "    console.log(' NEXT: run request 5 once, poll it to SUCCEEDED,');",
+              "    console.log(' then re-send request 6 per worker to collect usernames.');",
+              "    console.log(' Then set passwords in Security Console > Reset Password.');",
+              "    console.log('==================================================');",
+              "",
+              "    postman.setNextRequest('5 - Send Pending LDAP Requests (run ONCE at the end)');",
+              "}"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
