@@ -1,0 +1,487 @@
+{
+	"info": {
+		"_postman_id": "b3c4d5e6-f7a8-9b0c-1d2e-3f4a5b6c7d8e",
+		"name": "Oracle HCM - Complete Worker & User Sync (PROD to Lower)",
+		"description": "Turnkey Postman Collection to replicate a single Worker (Demographics, Work Relationship, Assignment) and User Account (with Security Roles) from Oracle Cloud HCM PROD to a Lower Environment (DEV/TEST/UAT).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Fetch Worker Details from PROD",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"var pNum = pm.collectionVariables.get('person_number');",
+							"",
+							"if (pm.response.code === 200 && jsonData.items && jsonData.items.length > 0) {",
+							"    var worker = jsonData.items[0];",
+							"    ",
+							"    // 1. Extract Names",
+							"    var namesArray = [];",
+							"    if (worker.names && worker.names.items) {",
+							"        worker.names.items.forEach(function(n) {",
+							"            var nameObj = {",
+							"                \"LegislationCode\": n.LegislationCode || 'US',",
+							"                \"LastName\": n.LastName,",
+							"                \"FirstName\": n.FirstName || '',",
+							"                \"Title\": n.Title || ''",
+							"            };",
+							"            if (n.MiddleName) nameObj.MiddleName = n.MiddleName;",
+							"            namesArray.push(nameObj);",
+							"        });",
+							"    }",
+							"    ",
+							"    // 2. Extract & Mask Emails (safety measure to prevent real emails in test env)",
+							"    var emailsArray = [];",
+							"    if (worker.emails && worker.emails.items) {",
+							"        worker.emails.items.forEach(function(e) {",
+							"            var originalEmail = e.EmailAddress || '';",
+							"            var maskedEmail = originalEmail ? (originalEmail.split('@')[0] + '@test.invalid') : ('test.' + pNum + '@test.invalid');",
+							"            emailsArray.push({",
+							"                \"EmailType\": e.EmailType || 'W1',",
+							"                \"EmailAddress\": maskedEmail,",
+							"                \"PrimaryFlag\": e.PrimaryFlag !== undefined ? e.PrimaryFlag : true",
+							"            });",
+							"        });",
+							"    } else {",
+							"        emailsArray.push({",
+							"            \"EmailType\": 'W1',",
+							"            \"EmailAddress\": 'test.' + pNum + '@test.invalid',",
+							"            \"PrimaryFlag\": true",
+							"        });",
+							"    }",
+							"    ",
+							"    // 3. Extract Work Relationship and Assignments",
+							"    var workRelArray = [];",
+							"    if (worker.workRelationships && worker.workRelationships.items) {",
+							"        worker.workRelationships.items.forEach(function(wr) {",
+							"            var asgArray = [];",
+							"            if (wr.assignments && wr.assignments.items) {",
+							"                wr.assignments.items.forEach(function(a) {",
+							"                    var asgObj = {",
+							"                        \"ActionCode\": \"HIRE\",",
+							"                        \"EffectiveStartDate\": a.EffectiveStartDate || wr.StartDate || '2020-01-01',",
+							"                        \"BusinessUnitName\": a.BusinessUnitName,",
+							"                        \"AssignmentStatusTypeCode\": \"ACTIVE\",",
+							"                        \"PrimaryAssignmentFlag\": a.PrimaryAssignmentFlag !== undefined ? a.PrimaryAssignmentFlag : true",
+							"                    };",
+							"                    if (a.JobName) asgObj.JobName = a.JobName;",
+							"                    if (a.DepartmentName) asgObj.DepartmentName = a.DepartmentName;",
+							"                    if (a.LocationName) asgObj.LocationName = a.LocationName;",
+							"                    if (a.PositionName) asgObj.PositionName = a.PositionName;",
+							"                    asgArray.push(asgObj);",
+							"                });",
+							"            }",
+							"            ",
+							"            var wrObj = {",
+							"                \"LegalEmployerName\": wr.LegalEmployerName,",
+							"                \"WorkerType\": wr.WorkerType || 'E',",
+							"                \"StartDate\": wr.StartDate || '2020-01-01',",
+							"                \"PrimaryFlag\": wr.PrimaryFlag !== undefined ? wr.PrimaryFlag : true,",
+							"                \"assignments\": asgArray",
+							"            };",
+							"            workRelArray.push(wrObj);",
+							"        });",
+							"    }",
+							"    ",
+							"    // 4. Assemble Final Worker Payload",
+							"    var primaryWr = workRelArray[0] || {};",
+							"    var workerPayload = {",
+							"        \"PersonNumber\": pNum,",
+							"        \"EffectiveStartDate\": primaryWr.StartDate || '2020-01-01',",
+							"        \"ActionCode\": \"HIRE\",",
+							"        \"LegalEmployerName\": primaryWr.LegalEmployerName,",
+							"        \"PersonType\": \"Employee\",",
+							"        \"names\": namesArray,",
+							"        \"emails\": emailsArray,",
+							"        \"workRelationships\": workRelArray",
+							"    };",
+							"    ",
+							"    pm.collectionVariables.set('worker_payload_json', JSON.stringify(workerPayload));",
+							"    console.log('[PROD] Worker payload built successfully for: ' + pNum);",
+							"    ",
+							"    pm.test('Worker Found in PROD: ' + pNum, function() {",
+							"        pm.expect(worker.PersonNumber).to.eql(pNum);",
+							"    });",
+							"} else {",
+							"    console.error('[PROD] Worker not found for PersonNumber: ' + pNum);",
+							"    pm.test('Worker found in PROD', function() {",
+							"        pm.expect.fail('Worker not found in PROD for PersonNumber: ' + pNum);",
+							"    });",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{"key": "username", "value": "{{prod_user}}", "type": "string"},
+						{"key": "password", "value": "{{prod_pass}}", "type": "string"}
+					]
+				},
+				"method": "GET",
+				"header": [{"key": "Accept", "value": "application/json"}],
+				"url": {
+					"raw": "{{prod_url}}/hcmRestApi/resources/11.13.18.05/workers?q=PersonNumber={{person_number}}&expand=names,emails,workRelationships.assignments",
+					"host": ["{{prod_url}}"],
+					"path": ["hcmRestApi", "resources", "11.13.18.05", "workers"],
+					"query": [
+						{"key": "q", "value": "PersonNumber={{person_number}}"},
+						{"key": "expand", "value": "names,emails,workRelationships.assignments"}
+					]
+				}
+			}
+		},
+		{
+			"name": "2. Check Worker in Lower Env",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"var pNum = pm.collectionVariables.get('person_number');",
+							"",
+							"if (jsonData.items && jsonData.items.length > 0) {",
+							"    pm.collectionVariables.set('target_worker_exists', 'true');",
+							"    console.log('[LOWER ENV] Worker already exists for PersonNumber: ' + pNum);",
+							"    pm.test('Worker already exists in Lower Env', function() {",
+							"        pm.expect(true).to.be.true;",
+							"    });",
+							"} else {",
+							"    pm.collectionVariables.set('target_worker_exists', 'false');",
+							"    console.log('[LOWER ENV] Worker does NOT exist. Proceeding with creation.');",
+							"    pm.test('Worker is new to Lower Env', function() {",
+							"        pm.expect(true).to.be.true;",
+							"    });",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{"key": "username", "value": "{{lower_user}}", "type": "string"},
+						{"key": "password", "value": "{{lower_pass}}", "type": "string"}
+					]
+				},
+				"method": "GET",
+				"header": [{"key": "Accept", "value": "application/json"}],
+				"url": {
+					"raw": "{{lower_url}}/hcmRestApi/resources/11.13.18.05/workers?q=PersonNumber={{person_number}}",
+					"host": ["{{lower_url}}"],
+					"path": ["hcmRestApi", "resources", "11.13.18.05", "workers"],
+					"query": [
+						{"key": "q", "value": "PersonNumber={{person_number}}"}
+					]
+				}
+			}
+		},
+		{
+			"name": "3. Create Worker in Lower Env",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"var workerExists = pm.collectionVariables.get('target_worker_exists');",
+							"if (workerExists === 'true') {",
+							"    console.log('[LOWER ENV] Skipping Worker creation: Record already exists.');",
+							"} else {",
+							"    var payload = pm.collectionVariables.get('worker_payload_json');",
+							"    pm.request.body.raw = payload;",
+							"    console.log('[LOWER ENV] Posting Worker record to Lower Env...');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var workerExists = pm.collectionVariables.get('target_worker_exists');",
+							"if (workerExists !== 'true') {",
+							"    pm.test('Worker Created in Lower Env (HTTP 201/200)', function () {",
+							"        pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+							"    });",
+							"    if (pm.response.code === 201 || pm.response.code === 200) {",
+							"        console.log('[LOWER ENV] Worker created successfully!');",
+							"    } else {",
+							"        console.error('[LOWER ENV] Worker creation failed: ' + pm.response.text());",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{"key": "username", "value": "{{lower_user}}", "type": "string"},
+						{"key": "password", "value": "{{lower_pass}}", "type": "string"}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{"key": "Content-Type", "value": "application/json"},
+					{"key": "Accept", "value": "application/json"}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{}"
+				},
+				"url": {
+					"raw": "{{lower_url}}/hcmRestApi/resources/11.13.18.05/workers",
+					"host": ["{{lower_url}}"],
+					"path": ["hcmRestApi", "resources", "11.13.18.05", "workers"]
+				}
+			}
+		},
+		{
+			"name": "4. Fetch User Account & Roles from PROD",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"if (pm.response.code === 200 && jsonData.items && jsonData.items.length > 0) {",
+							"    var user = jsonData.items[0];",
+							"    pm.collectionVariables.set('extracted_username', user.Username);",
+							"    ",
+							"    var roles = [];",
+							"    if (user.userRoleDetails && user.userRoleDetails.items) {",
+							"        user.userRoleDetails.items.forEach(function(r) {",
+							"            if (r.RoleCommonName) {",
+							"                roles.push({ \"RoleCommonName\": r.RoleCommonName });",
+							"            }",
+							"        });",
+							"    }",
+							"    ",
+							"    pm.collectionVariables.set('extracted_roles_json', JSON.stringify(roles));",
+							"    console.log('[PROD] Extracted User: ' + user.Username + ' with ' + roles.length + ' roles.');",
+							"    pm.test('User & Roles Extracted from PROD', function() {",
+							"        pm.expect(user.Username).to.not.be.empty;",
+							"    });",
+							"} else {",
+							"    console.warn('[PROD] No User Account found. Will generate username using PersonNumber.');",
+							"    pm.collectionVariables.set('extracted_username', 'USER_' + pm.collectionVariables.get('person_number'));",
+							"    pm.collectionVariables.set('extracted_roles_json', '[]');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{"key": "username", "value": "{{prod_user}}", "type": "string"},
+						{"key": "password", "value": "{{prod_pass}}", "type": "string"}
+					]
+				},
+				"method": "GET",
+				"header": [{"key": "Accept", "value": "application/json"}],
+				"url": {
+					"raw": "{{prod_url}}/hcmRestApi/resources/11.13.18.05/userAccounts?q=PersonNumber={{person_number}}&expand=userRoleDetails",
+					"host": ["{{prod_url}}"],
+					"path": ["hcmRestApi", "resources", "11.13.18.05", "userAccounts"],
+					"query": [
+						{"key": "q", "value": "PersonNumber={{person_number}}"},
+						{"key": "expand", "value": "userRoleDetails"}
+					]
+				}
+			}
+		},
+		{
+			"name": "5. Check User in Lower Env",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"if (jsonData.items && jsonData.items.length > 0) {",
+							"    pm.collectionVariables.set('target_user_exists', 'true');",
+							"    console.log('[LOWER ENV] User account already exists.');",
+							"} else {",
+							"    pm.collectionVariables.set('target_user_exists', 'false');",
+							"    console.log('[LOWER ENV] User account does not exist. Ready to create.');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{"key": "username", "value": "{{lower_user}}", "type": "string"},
+						{"key": "password", "value": "{{lower_pass}}", "type": "string"}
+					]
+				},
+				"method": "GET",
+				"header": [{"key": "Accept", "value": "application/json"}],
+				"url": {
+					"raw": "{{lower_url}}/hcmRestApi/resources/11.13.18.05/userAccounts?q=Username='{{extracted_username}}'",
+					"host": ["{{lower_url}}"],
+					"path": ["hcmRestApi", "resources", "11.13.18.05", "userAccounts"],
+					"query": [
+						{"key": "q", "value": "Username='{{extracted_username}}'"}
+					]
+				}
+			}
+		},
+		{
+			"name": "6. Create User Account in Lower Env",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"var userExists = pm.collectionVariables.get('target_user_exists');",
+							"if (userExists === 'true') {",
+							"    console.log('[LOWER ENV] Skipping User Account creation: User already exists.');",
+							"} else {",
+							"    var payload = {",
+							"        \"Username\": pm.collectionVariables.get('extracted_username'),",
+							"        \"PersonNumber\": pm.collectionVariables.get('person_number'),",
+							"        \"Suspended\": false,",
+							"        \"Password\": pm.collectionVariables.get('default_test_password'),",
+							"        \"userRoleDetails\": JSON.parse(pm.collectionVariables.get('extracted_roles_json') || '[]')",
+							"    };",
+							"    pm.request.body.raw = JSON.stringify(payload, null, 2);",
+							"    console.log('[LOWER ENV] Creating User Account for ' + payload.Username + '...');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var userExists = pm.collectionVariables.get('target_user_exists');",
+							"if (userExists !== 'true') {",
+							"    pm.test('User Account Created (HTTP 201/200)', function () {",
+							"        pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+							"    });",
+							"    if (pm.response.code === 201 || pm.response.code === 200) {",
+							"        console.log('[LOWER ENV] User Account & Roles created successfully!');",
+							"    } else {",
+							"        console.error('[LOWER ENV] User Account creation failed: ' + pm.response.text());",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{"key": "username", "value": "{{lower_user}}", "type": "string"},
+						{"key": "password", "value": "{{lower_pass}}", "type": "string"}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{"key": "Content-Type", "value": "application/json"},
+					{"key": "Accept", "value": "application/json"}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{}"
+				},
+				"url": {
+					"raw": "{{lower_url}}/hcmRestApi/resources/11.13.18.05/userAccounts",
+					"host": ["{{lower_url}}"],
+					"path": ["hcmRestApi", "resources", "11.13.18.05", "userAccounts"]
+				}
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "person_number",
+			"value": "100234",
+			"type": "string",
+			"description": "Person Number to replicate"
+		},
+		{
+			"key": "prod_url",
+			"value": "https://fa-xxxx-saasfaprod1.fa.ocs.oraclecloud.com",
+			"type": "string"
+		},
+		{
+			"key": "prod_user",
+			"value": "PROD_API_USER",
+			"type": "string"
+		},
+		{
+			"key": "prod_pass",
+			"value": "YourProdPassword",
+			"type": "string"
+		},
+		{
+			"key": "lower_url",
+			"value": "https://fa-xxxx-test.fa.ocs.oraclecloud.com",
+			"type": "string"
+		},
+		{
+			"key": "lower_user",
+			"value": "TEST_API_USER",
+			"type": "string"
+		},
+		{
+			"key": "lower_pass",
+			"value": "YourTestPassword",
+			"type": "string"
+		},
+		{
+			"key": "default_test_password",
+			"value": "Welcome#12345",
+			"type": "string"
+		},
+		{
+			"key": "worker_payload_json",
+			"value": "{}",
+			"type": "string"
+		},
+		{
+			"key": "target_worker_exists",
+			"value": "false",
+			"type": "string"
+		},
+		{
+			"key": "extracted_username",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "extracted_roles_json",
+			"value": "[]",
+			"type": "string"
+		},
+		{
+			"key": "target_user_exists",
+			"value": "false",
+			"type": "string"
+		}
+	]
+}
